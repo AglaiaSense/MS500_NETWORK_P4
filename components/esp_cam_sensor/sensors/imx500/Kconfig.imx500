@@ -1,0 +1,80 @@
+menuconfig CAMERA_IMX500
+    bool "IMX500"
+    default n
+    help
+        Enabling this option will add the support for IMX500.
+
+if CAMERA_IMX500
+    menuconfig CAMERA_IMX500_AUTO_DETECT
+        bool "Auto detect IMX500"
+        default y
+        help
+            When enabled, it provides the ability in application layer to automatically
+            detect camera sensors one by one.
+
+    if CAMERA_IMX500_AUTO_DETECT
+        config CAMERA_IMX500_AUTO_DETECT_MIPI_INTERFACE_SENSOR
+            bool "Detect for MIPI interface sensor"
+            default y
+            help
+                When enabled, you don't need to call imx500_detect manaually, imx500
+                will be automatically detected and connected to the MIPI CSI interface
+                when the application starts.
+    endif
+
+    choice CAMERA_IMX500_MIPI_DEFAULT_FMT
+        prompt "Default format select"
+        default CAMERA_IMX500_MIPI_RAW10_1920X1080_30FPS
+        help
+            Select the default format to load when the sensor is detected.
+            When the sensor is in stream off state, the format can be changed.
+    
+        config CAMERA_IMX500_MIPI_RAW10_1920X1080_30FPS
+            bool "RAW10 1920x1080 30fps, MIPI 2lane 24M input"
+    endchoice # CAMERA_IMX500_MIPI_DEFAULT_FMT
+
+    config CAMERA_IMX500_MIPI_IF_FORMAT_INDEX_DAFAULT
+        int
+        default 0 if CAMERA_IMX500_MIPI_RAW10_1920X1080_30FPS
+        help
+            Set the configuration loaded by default for the MIPI interface.
+            More information can be obtained by calling the query_support_formats().
+
+    config CAMERA_IMX500_CSI_LINESYNC_ENABLE
+        bool "CSI Line sync enable"
+        default y
+        help
+            If enabled, send line short packet for each line.
+
+    config CAMERA_IMX500_ISP_AF_ENABLE
+        bool "AF(auto focus) enable"
+        default y
+        help
+            If enabled, the camera module will enable some IO pins to drive the
+            VCM motor.
+
+    choice CAMERA_IMX500_IPA_JSON_CONFIGURATION_FILE
+        prompt "IPA JSON Configuration File"
+        default CAMERA_IMX500_DEFAULT_IPA_JSON_CONFIGURATION_FILE
+        help
+            Select IMX500 JSON configuration file.
+
+        config CAMERA_IMX500_DEFAULT_IPA_JSON_CONFIGURATION_FILE
+            bool "Default"
+            help
+                Use the "esp_cam_sensor/sensors/imx500/cfg/imx500_default.json".
+
+        config CAMERA_IMX500_CUSTOMIZED_IPA_JSON_CONFIGURATION_FILE
+            bool "Customized"
+            help
+                Use a customized IMX500 JSON configuration file. Users should configure
+                the file's path using the option "CAMERA_IMX500_CUSTOMIZED_IPA_JSON_CONFIGURATION_FILE_PATH."
+    endchoice
+
+    config CAMERA_IMX500_CUSTOMIZED_IPA_JSON_CONFIGURATION_FILE_PATH
+        string "IMX500 Customized JSON Configuration File Path"
+        depends on CAMERA_IMX500_CUSTOMIZED_IPA_JSON_CONFIGURATION_FILE
+        help
+            Customized IMX500 JSON configuration file's path and this path is evaluated
+            relative to the project root directory by default.
+endif

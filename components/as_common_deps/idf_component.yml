@@ -1,0 +1,9 @@
+# components/as_common_deps/idf_component.yml
+description: Common dependencies for OpenCV and FlatBuffers
+version: "1.0.0" 
+includes:
+  - opencv
+  - opencv/opencv2
+  - flat_buffers
+dependencies: {}
+

@@ -1,0 +1,15 @@
+dependencies:
+  cmake_utilities: '*'
+  idf: '>=5.4'
+  esp_video:
+    version: "0.*"
+    path: "../components/esp_video"
+  usb_device_uvc:
+    version: "1.1.*"
+    override_path: "../components/usb_device_uvc"
+  as_common_deps:
+    version: "1.0.0"
+    path: "../as_common_deps"     
+  as_code:
+    version: "1.0.0"
+    path: "../components/as_code"  # 相对于项目根目录的路径
