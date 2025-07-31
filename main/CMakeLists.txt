@@ -3,9 +3,11 @@ file(GLOB_RECURSE SOURCES ./*.cpp ./*.c
                             )
 
 idf_component_register(SRCS ${SOURCES}
-                     INCLUDE_DIRS "" ./bsp  ./bsp_video  ./ai_drivers  ./ai_process  
+                     INCLUDE_DIRS "" ./bsp  ./bsp_video  ./ai_drivers  ./ai_process  ./bsp_network
                 )
   
+target_compile_options(${COMPONENT_LIB} PRIVATE "-Wno-format")
+
 
 if(NOT CONFIG_SOC_SDMMC_HOST_SUPPORTED)
     fail_at_build_time(sdmmc ""

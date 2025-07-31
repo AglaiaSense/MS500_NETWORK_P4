@@ -37,6 +37,7 @@
 
 #include "bsp_usb_cdc.h"
 #include "vc_video_v4l2.h"
+#include "mqtt_test.h"
 
 static const char *TAG = "APP_MAIN";
 
@@ -49,7 +50,7 @@ extern void enter_light_sleep_after();
 device_ctx_t *device_ctx;
 TaskHandle_t spi_slave_task_handle = NULL;
 
-uvc_model_t current_model = UVC_MODEL_JPG;
+uvc_model_t current_model = UVC_MODEL_VIDEO;
 
 capture_mode_t g_capture_mode = CAPTURE_MODE_CONTINUOUS;
 
@@ -394,6 +395,8 @@ void app_main(void) {
     app_update_ota();
     // 更新AI模型
     app_update_dnn();
+
+    // mqtt_test_init();
 
     // 启动imx500
     app_boot_launch_flash();
