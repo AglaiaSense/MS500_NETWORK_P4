@@ -184,11 +184,11 @@
         "vc_video_v4l2.h": "c",
         "mqtt_test.h": "c"
     },
-    "idf.portWin": "COM4",
+    "idf.portWin": "COM25",
     "idf.flashType": "UART",
     "C_Cpp.intelliSenseMemoryLimit": 2048,
     "C_Cpp.intelliSenseCacheSize": 2048,
-    "idf.espIdfPathWin": "C:/Users/xiuxin/Desktop/esp-idf/frameworks/esp-idf-v5.4.1/",
-    "idf.toolsPathWin": "C:\\Users\\xiuxin\\Desktop\\esp-idf",
-    "idf.pythonInstallPath": "C:\\Users\\xiuxin\\Desktop\\esp-idf\\tools\\idf-python\\3.11.2\\python.exe"
+    "idf.espIdfPathWin": "C:\\Users\\ZWC\\esp\\v5.4\\esp-idf",
+    "idf.toolsPathWin": "D:\\Espressif",
+    "idf.pythonInstallPath": "D:\\Espressif\\tools\\idf-python\\3.11.2\\python.exe"
 }

@@ -215,5 +215,5 @@ void mqtt_test_init(void) {
     ESP_LOGI(TAG, "ESP_WIFI_MODE_STA");
     wifi_init_sta_ap();
 
-    mqtt_app_start();
+    // mqtt_app_start();
 }

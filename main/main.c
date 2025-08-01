@@ -308,7 +308,7 @@ void app_common_device(void) {
         ESP_LOGE("BSP_CONFIG", "Failed to allocate memory for uvc_t");
     }
 
-    bsp_init_sd_card(device_ctx);
+    // bsp_init_sd_card(device_ctx);
     bsp_spiff_init();
 
     init_storage_system();
@@ -396,7 +396,7 @@ void app_main(void) {
     // 更新AI模型
     app_update_dnn();
 
-    // mqtt_test_init();
+    mqtt_test_init();
 
     // 启动imx500
     app_boot_launch_flash();
