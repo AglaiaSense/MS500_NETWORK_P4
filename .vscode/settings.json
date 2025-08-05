@@ -183,7 +183,12 @@
         "*.inc": "c",
         "vc_video_v4l2.h": "c",
         "mqtt_test.h": "c",
-        "ethernet_init.h": "c"
+        "ethernet_init.h": "c",
+        "bsp_network.h": "c",
+        "esp_efuse.h": "c",
+        "bsp_ap_sta.h": "c",
+        "bsp_ethernet.h": "c",
+        "esp_eth.h": "c"
     },
     "idf.portWin": "COM4",
     "idf.flashType": "UART",
