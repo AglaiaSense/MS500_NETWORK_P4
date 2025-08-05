@@ -182,7 +182,8 @@
         "cjson.h": "c",
         "*.inc": "c",
         "vc_video_v4l2.h": "c",
-        "mqtt_test.h": "c"
+        "mqtt_test.h": "c",
+        "ethernet_init.h": "c"
     },
     "idf.portWin": "COM4",
     "idf.flashType": "UART",

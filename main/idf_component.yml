@@ -12,6 +12,8 @@ dependencies:
     path: "../as_common_deps"     
   as_code:
     version: "1.0.0"
-    path: "../components/as_code"  # 相对于项目根目录的路径
+    path: "../components/as_code"  
+  ethernet_init:
+    path: ${IDF_PATH}/examples/ethernet/basic/components/ethernet_init  
   espressif/esp_hosted: "*"
   espressif/esp_wifi_remote: "*"

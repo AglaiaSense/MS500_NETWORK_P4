@@ -38,6 +38,7 @@
 #include "bsp_usb_cdc.h"
 #include "vc_video_v4l2.h"
 #include "mqtt_test.h"
+#include "ethernet_example_main.h"
 
 static const char *TAG = "APP_MAIN";
 
@@ -387,6 +388,7 @@ void app_boot_launch_flash(void) {
 
 void app_main(void) {
 
+
     app_start_printf();
 
     app_common_device();
@@ -396,7 +398,8 @@ void app_main(void) {
     // 更新AI模型
     app_update_dnn();
 
-    mqtt_test_init();
+    // mqtt_test_init();
+    app_main_ethernet();
 
     // 启动imx500
     app_boot_launch_flash();
