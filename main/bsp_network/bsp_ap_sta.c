@@ -36,13 +36,8 @@ static int s_retry_num = 0;
 
 // AP configuration macros
 #define BSP_AP_SSID_PREFIX "MS500"
-#define BSP_AP_PASSWORD ""
-
-// Current WiFi mode configuration
-#ifndef BSP_WIFI_MODE
-#define BSP_WIFI_MODE BSP_WIFI_MODE_AP_STA
-#endif
-
+#define BSP_AP_PASSWORD "12345678"
+ 
 
 static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                               int32_t event_id, void *event_data) {
@@ -66,11 +61,6 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
     }
 }
 
-static void generate_ap_ssid(char *ssid_buffer, size_t buffer_size) {
-    snprintf(ssid_buffer, buffer_size, "%s_%02X%02X%02X%02X%02X%02X", 
-             BSP_AP_SSID_PREFIX, g_device_mac[0], g_device_mac[1], g_device_mac[2], 
-             g_device_mac[3], g_device_mac[4], g_device_mac[5]);
-}
 
 static void wifi_init_common(void) {
     s_wifi_event_group = xEventGroupCreate();
@@ -92,6 +82,7 @@ static void wifi_init_common(void) {
                                                         &instance_got_ip));
 }
 
+// -------------------- config ---------------------------------
 void bsp_wifi_log_config(void) {
     ESP_LOGI(TAG, "[APP] Startup..");
     ESP_LOGI(TAG, "[APP] Free memory: %d bytes", esp_get_free_heap_size());
@@ -112,6 +103,12 @@ void bsp_wifi_sta_config_only(void) {
         },
     };
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config_sta));
+}
+
+static void generate_ap_ssid(char *ssid_buffer, size_t buffer_size) {
+    snprintf(ssid_buffer, buffer_size, "%s_%02X%02X%02X%02X%02X%02X", 
+             BSP_AP_SSID_PREFIX, g_device_mac[0], g_device_mac[1], g_device_mac[2], 
+             g_device_mac[3], g_device_mac[4], g_device_mac[5]);
 }
 
 void bsp_wifi_ap_config_only(void) {
@@ -138,7 +135,7 @@ void bsp_wifi_ap_config_only(void) {
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config_ap));
 }
 
-
+// -------------------- init    ------------------------
 void bsp_wifi_sta_init(void) {
     ESP_LOGI(TAG, "Initializing WiFi STA mode");
     

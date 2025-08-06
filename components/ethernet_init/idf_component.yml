@@ -1,0 +1,6 @@
+# components/as_code/idf_component.yml
+version: "1.0.0"
+description: "Advanced System Logging Component"
+dependencies: 
+  idf: ">=5.4"
+  cmake_utilities: "0.*"

@@ -13,7 +13,9 @@ dependencies:
   as_code:
     version: "1.0.0"
     path: "../components/as_code"  
+  # ethernet_init:
+  #   path: ${IDF_PATH}/examples/ethernet/basic/components/ethernet_init
   ethernet_init:
-    path: ${IDF_PATH}/examples/ethernet/basic/components/ethernet_init
+    path: "../components/ethernet_init"  
   espressif/esp_hosted: "*"
   espressif/esp_wifi_remote: "*"

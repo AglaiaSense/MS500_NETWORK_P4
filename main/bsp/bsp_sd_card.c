@@ -33,14 +33,14 @@ esp_err_t bsp_init_sd_card(device_ctx_t *sd) {
 
     // 配置SDMMC主机参数
     sdmmc_host_t host = SDMMC_HOST_DEFAULT();
+      host.slot = SDMMC_HOST_SLOT_0;
+
 #if CONFIG_EXAMPLE_SDMMC_SPEED_HS
     host.max_freq_khz = SDMMC_FREQ_HIGHSPEED; // 高速模式
 #elif CONFIG_EXAMPLE_SDMMC_SPEED_UHS_I_SDR50
-    host.slot = SDMMC_HOST_SLOT_0;
     host.max_freq_khz = SDMMC_FREQ_SDR50;
     host.flags &= ~SDMMC_HOST_FLAG_DDR; // 禁用DDR模式
 #elif CONFIG_EXAMPLE_SDMMC_SPEED_UHS_I_DDR50
-    host.slot = SDMMC_HOST_SLOT_0;
     host.max_freq_khz = SDMMC_FREQ_DDR50; // DDR50模式
 #endif
 
@@ -119,7 +119,7 @@ esp_err_t bsp_init_sd_card(device_ctx_t *sd) {
     ESP_LOGI(TAG, "Filesystem mounted");
 
     // 打印SD卡信息
-    // sdmmc_card_print_info(stdout, card);
+    sdmmc_card_print_info(stdout, card);
     sd->card = card;
     return ret;
 }
