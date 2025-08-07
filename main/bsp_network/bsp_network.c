@@ -8,6 +8,8 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
 #include "bsp_mqtt.h"
+#include "bsp_lte_boot.h"
+
 
 #if BSP_NETWORK_USE_WIFI_AP_STA
 #include "bsp_ap_sta.h"
@@ -108,15 +110,19 @@ void bsp_network_init(void)
     ESP_LOGI(TAG, "Using WiFi AP/STA mode");
     bsp_wifi_log_config();
     bsp_ap_sta_init();
-    
-#elif BSP_NETWORK_USE_ETHERNET
-    ESP_LOGI(TAG, "Using Ethernet mode"); 
-    bsp_ethernet_init();
-    
-#else
-    #error "No network mode selected! Please enable either BSP_NETWORK_USE_WIFI_AP_STA or BSP_NETWORK_USE_ETHERNET"
 #endif
 
+#if  BSP_NETWORK_USE_ETHERNET
+    ESP_LOGI(TAG, "Using Ethernet mode"); 
+    bsp_ethernet_init();
+#endif
+
+#if  BSP_NETWORK_USE_LTE
+    ESP_LOGI(TAG, "Using LTE mode");
+    bsp_lte_init();
+
+#endif
+ 
     ESP_LOGI(TAG, "Network BSP initialized successfully");
     
     // Wait for network connection and start MQTT when connected

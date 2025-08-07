@@ -6,6 +6,8 @@
 // Network configuration macros
 #define BSP_NETWORK_USE_WIFI_AP_STA    0
 #define BSP_NETWORK_USE_ETHERNET       1
+#define BSP_NETWORK_USE_LTE            1
+
 
 // Global MAC address variable
 extern uint8_t g_device_mac[6];

@@ -21,7 +21,7 @@
 - **ESP-IDF**：https://github.com/espressif/esp-idf
 - **ESP-IoT-Solution**：https://github.com/espressif/esp-iot-solution
 - **esp-video-components**：https://github.com/espressif/esp-video-components
-- **esp-hosted-mcu**：https://github.com/espressif/esp-hosted-mcu/blob/main/docs/esp32_p4_function_ev_board.md
+- **esp-hosted-mcu**：https://github.com/espressif/esp-hosted-mcu
 - **esp-iot-bridge**：https://github.com/espressif/esp-iot-bridge
 - **esp32-p4-eye**：https://github.com/espressif/esp-dev-kits/blob/master/examples/esp32-p4-eye/examples/factory_demo/README_CN.md
 
