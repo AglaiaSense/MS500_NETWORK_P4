@@ -1,15 +1,15 @@
 #include "bsp_network.h"
-#include "esp_netif.h"
+#include "bsp_lte_boot.h"
+#include "bsp_mqtt.h"
+#include "esp_eth.h"
 #include "esp_event.h"
 #include "esp_log.h"
-#include "esp_wifi.h"
-#include "esp_eth.h"
 #include "esp_mac.h"
+#include "esp_netif.h"
+#include "esp_wifi.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
-#include "bsp_mqtt.h"
-#include "bsp_lte_boot.h"
-
+#include "freertos/task.h"
 
 #if BSP_NETWORK_USE_WIFI_AP_STA
 #include "bsp_ap_sta.h"
@@ -21,17 +21,40 @@
 
 static const char *TAG = "bsp_network";
 
-// Network connection event group
-static EventGroupHandle_t s_network_event_group;
-#define NETWORK_CONNECTED_BIT BIT0
-#define NETWORK_FAIL_BIT BIT1
-
 // Global MAC address variable
 uint8_t g_device_mac[6] = {0};
 
+// Global network event group
+EventGroupHandle_t g_network_event_group = NULL;
+
+// Network monitoring task
+static void network_monitor_task(void *pvParameter) {
+    static bool mqtt_initialized = false;
+
+    while (1) {
+        // 等待任何网络连接事件
+        EventBits_t bits = xEventGroupWaitBits(g_network_event_group,
+                                               NETWORK_ETHERNET_CONNECTED_BIT | NETWORK_WIFI_STA_CONNECTED_BIT | NETWORK_LTE_CONNECTED_BIT,
+                                               pdFALSE,
+                                               pdFALSE,
+                                               portMAX_DELAY);
+
+        // 检查是否有网络连接且MQTT未初始化
+        if (!mqtt_initialized && (bits & (NETWORK_ETHERNET_CONNECTED_BIT | NETWORK_WIFI_STA_CONNECTED_BIT | NETWORK_LTE_CONNECTED_BIT))) {
+            ESP_LOGI(TAG, "Network connected, initializing MQTT...");
+            bsp_mqtt_init();
+            mqtt_initialized = true;
+             vTaskDelete(NULL); // 删除当前任务
+
+        }
+
+        vTaskDelay(pdMS_TO_TICKS(1000)); // 每秒检查一次
+    }
+}
+
 void bsp_network_get_mac_address(void) {
     esp_err_t ret = ESP_OK;
-    
+
     // Get MAC address using ESP32-P4 compatible function
     ret = esp_read_mac(g_device_mac, ESP_MAC_BASE);
     if (ret == ESP_OK) {
@@ -43,88 +66,94 @@ void bsp_network_get_mac_address(void) {
     }
 }
 
-static void bsp_network_connection_event_handler(void *arg, esp_event_base_t event_base,
-                                                 int32_t event_id, void *event_data) {
-    if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
-        ESP_LOGI(TAG, "WiFi disconnected");
-        xEventGroupSetBits(s_network_event_group, NETWORK_FAIL_BIT);
-    } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
-        ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
-        ESP_LOGI(TAG, "WiFi got IP:" IPSTR, IP2STR(&event->ip_info.ip));
-        xEventGroupSetBits(s_network_event_group, NETWORK_CONNECTED_BIT);
-    } else if (event_base == IP_EVENT && event_id == IP_EVENT_ETH_GOT_IP) {
-        ip_event_got_ip_t *event = (ip_event_got_ip_t *)event_data;
-        ESP_LOGI(TAG, "Ethernet got IP:" IPSTR, IP2STR(&event->ip_info.ip));
-        xEventGroupSetBits(s_network_event_group, NETWORK_CONNECTED_BIT);
-    }
-}
+void bsp_network_init(void) {
+    ESP_LOGI(TAG, "Initializing network BSP...");
 
-void bsp_network_wait_connection(void) {
-    if (!s_network_event_group) {
-        ESP_LOGE(TAG, "Network event group not initialized");
+    // Create network event group
+    g_network_event_group = xEventGroupCreate();
+    if (g_network_event_group == NULL) {
+        ESP_LOGE(TAG, "Failed to create network event group");
         return;
     }
-    
-    ESP_LOGI(TAG, "Waiting for network connection...");
-    
-    EventBits_t bits = xEventGroupWaitBits(s_network_event_group,
-                                           NETWORK_CONNECTED_BIT | NETWORK_FAIL_BIT,
-                                           pdFALSE,
-                                           pdFALSE,
-                                           portMAX_DELAY);
 
-    if (bits & NETWORK_CONNECTED_BIT) {
-        ESP_LOGI(TAG, "Network connected successfully");
-        ESP_LOGI(TAG, "Starting MQTT initialization...");
-        bsp_mqtt_init();
-    } else if (bits & NETWORK_FAIL_BIT) {
-        ESP_LOGI(TAG, "Network connection failed");
-    } else {
-        ESP_LOGE(TAG, "UNEXPECTED EVENT");
+    // Create network monitoring task
+    if (xTaskCreate(network_monitor_task, "network_monitor", 1024*2, NULL, 5, NULL) != pdPASS) {
+        ESP_LOGE(TAG, "Failed to create network monitor task");
+        return;
     }
-}
 
-void bsp_network_init(void)
-{
-    ESP_LOGI(TAG, "Initializing network BSP...");
-    
     // Get and print MAC address first
     bsp_network_get_mac_address();
-    
-    // Create network event group
-    s_network_event_group = xEventGroupCreate();
-    
+
     // Common network initialization
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
-    
-    // Register network connection event handler
-    ESP_ERROR_CHECK(esp_event_handler_register(WIFI_EVENT, WIFI_EVENT_STA_DISCONNECTED, 
-                                              &bsp_network_connection_event_handler, NULL));
-    ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, 
-                                              &bsp_network_connection_event_handler, NULL));
-    ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_ETH_GOT_IP, 
-                                              &bsp_network_connection_event_handler, NULL));
-    
+
 #if BSP_NETWORK_USE_WIFI_AP_STA
     ESP_LOGI(TAG, "Using WiFi AP/STA mode");
     bsp_wifi_log_config();
     bsp_ap_sta_init();
 #endif
 
-#if  BSP_NETWORK_USE_ETHERNET
-    ESP_LOGI(TAG, "Using Ethernet mode"); 
+#if BSP_NETWORK_USE_ETHERNET
+    ESP_LOGI(TAG, "Using Ethernet mode");
     bsp_ethernet_init();
 #endif
 
-#if  BSP_NETWORK_USE_LTE
+#if BSP_NETWORK_USE_LTE
     ESP_LOGI(TAG, "Using LTE mode");
     bsp_lte_init();
 
 #endif
- 
+
     ESP_LOGI(TAG, "Network BSP initialized successfully");
+}
+
+//------------------ 网络状态查询功能 ------------------
+
+// 获取当前网络连接状态并打印
+void bsp_network_print_status(void) {
+    ESP_LOGI(TAG, "=== Network Status ===");
     
-    // Wait for network connection and start MQTT when connected
-    bsp_network_wait_connection();
+    if (g_network_event_group == NULL) {
+        ESP_LOGW(TAG, "Network not initialized");
+        return;
+    }
+    
+    // 获取当前事件位状态
+    EventBits_t current_bits = xEventGroupGetBits(g_network_event_group);
+    bool has_connection = false;
+    
+    // 检查以太网连接状态
+    if (current_bits & NETWORK_ETHERNET_CONNECTED_BIT) {
+        ESP_LOGI(TAG, "√ Ethernet: Connected");
+        has_connection = true;
+    } else {
+        ESP_LOGI(TAG, "× Ethernet: Disconnected");
+    }
+    
+    // 检查WiFi STA连接状态
+    if (current_bits & NETWORK_WIFI_STA_CONNECTED_BIT) {
+        ESP_LOGI(TAG, "√ WiFi STA: Connected");
+        has_connection = true;
+    } else {
+        ESP_LOGI(TAG, "× WiFi STA: Disconnected");
+    }
+    
+    // 检查LTE连接状态
+    if (current_bits & NETWORK_LTE_CONNECTED_BIT) {
+        ESP_LOGI(TAG, "√ LTE: Connected");
+        has_connection = true;
+    } else {
+        ESP_LOGI(TAG, "× LTE: Disconnected");
+    }
+    
+    // 总结连接状态
+    if (has_connection) {
+        ESP_LOGI(TAG, "Network Status: Online");
+    } else {
+        ESP_LOGW(TAG, "Network Status: Offline - No active connections");
+    }
+    
+    ESP_LOGI(TAG, "==================");
 }

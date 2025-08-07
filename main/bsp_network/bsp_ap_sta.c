@@ -17,6 +17,7 @@
 
 #include "esp_log.h"
 #include "bsp_mqtt.h"
+#include "bsp_network.h"
 
 #include "bsp_ap_sta.h"
 
@@ -38,6 +39,7 @@ static int s_retry_num = 0;
 #define BSP_AP_SSID_PREFIX "MS500"
 #define BSP_AP_PASSWORD "12345678"
  
+// ------------------------------------      event      ------------------------------------
 
 static void wifi_event_handler(void *arg, esp_event_base_t event_base,
                               int32_t event_id, void *event_data) {
@@ -58,6 +60,12 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base,
         ESP_LOGI(TAG, "got ip:" IPSTR, IP2STR(&event->ip_info.ip));
         s_retry_num = 0;
         xEventGroupSetBits(s_wifi_event_group, WIFI_CONNECTED_BIT);
+        
+        // Set WiFi STA connected bit in network event group
+        if (g_network_event_group != NULL) {
+            xEventGroupSetBits(g_network_event_group, NETWORK_WIFI_STA_CONNECTED_BIT);
+            ESP_LOGI(TAG, "WiFi STA connected bit set in network event group");
+        }
     }
 }
 

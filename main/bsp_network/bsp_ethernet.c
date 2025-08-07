@@ -19,11 +19,11 @@
 #include <string.h>
 
 #include "bsp_mqtt.h"
+#include "bsp_network.h"
 #include "esp_log.h"
 static const char *TAG = "bsp_ethernet";
 
-// ------------------------------------      Ethernet      ------------------------------------
-
+// ------------------------------------      event      ------------------------------------
 /** Event handler for Ethernet events */
 static void eth_event_handler(void *arg, esp_event_base_t event_base,
                               int32_t event_id, void *event_data) {
@@ -68,14 +68,28 @@ static void got_ip_event_handler(void *arg, esp_event_base_t event_base,
     ESP_LOGI(TAG, "ETHGW:" IPSTR, IP2STR(&ip_info->gw));
     ESP_LOGI(TAG, "IP Check: " IPSTR, IP2STR(&ip_info->ip));
     ESP_LOGI(TAG, "~~~~~~~~~~~");
+    
+    // Set ethernet connected bit in network event group
+    if (g_network_event_group != NULL) {
+        xEventGroupSetBits(g_network_event_group, NETWORK_ETHERNET_CONNECTED_BIT);
+        ESP_LOGI(TAG, "Ethernet connected bit set in network event group");
+    }
 }
-void bsp_ethernet_init(void) {
-    ESP_LOGI(TAG, "Initializing Ethernet BSP...");
+
+void bsp_ethernet_register_event(void) {
 
     // Register user defined event handers
     ESP_ERROR_CHECK(esp_event_handler_register(ETH_EVENT, ESP_EVENT_ANY_ID, &eth_event_handler, NULL));
     ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_ETH_GOT_IP, &got_ip_event_handler, NULL));
     ESP_ERROR_CHECK(esp_event_handler_register(IP_EVENT, IP_EVENT_ETH_LOST_IP, &got_ip_event_handler, NULL));
+}
+// ------------------------------------      init      ------------------------------------
+
+
+void bsp_ethernet_init(void) {
+    ESP_LOGI(TAG, "Initializing Ethernet BSP...");
+
+    bsp_ethernet_register_event();
 
     // Initialize Ethernet driver
     uint8_t s_eth_port_cnt = 0;
@@ -85,7 +99,7 @@ void bsp_ethernet_init(void) {
 
     ESP_ERROR_CHECK(esp_netif_init());
     esp_netif_inherent_config_t esp_netif_config = ESP_NETIF_INHERENT_DEFAULT_ETH();
-    
+
     esp_netif_config_t cfg_spi = {
         .base = &esp_netif_config,
         .stack = ESP_NETIF_NETSTACK_DEFAULT_ETH};

@@ -157,6 +157,10 @@ void main_video_task(void *pvParameters) {
     while (1) {
         vTaskDelay(pdMS_TO_TICKS(1000));
         printf("runtime ..........: %d\r\n", runtime_sec++);
+        if (runtime_sec %10 == 0)  {
+            bsp_network_print_status();
+        }
+        
         // printf("22222222222222222222 ..........: %d\r\n", runtime_sec++);
     }
     vTaskDelete(NULL);
