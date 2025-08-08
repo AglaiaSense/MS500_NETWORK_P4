@@ -1,6 +1,7 @@
 #include "bsp_network.h"
 #include "bsp_lte_boot.h"
 #include "bsp_mqtt.h"
+#include "bsp_http.h"
 #include "esp_eth.h"
 #include "esp_event.h"
 #include "esp_log.h"
@@ -30,6 +31,7 @@ EventGroupHandle_t g_network_event_group = NULL;
 // Network monitoring task
 static void network_monitor_task(void *pvParameter) {
     static bool mqtt_initialized = false;
+    static bool http_initialized = false;
 
     while (1) {
         // 等待任何网络连接事件
@@ -39,13 +41,27 @@ static void network_monitor_task(void *pvParameter) {
                                                pdFALSE,
                                                portMAX_DELAY);
 
-        // 检查是否有网络连接且MQTT未初始化
-        if (!mqtt_initialized && (bits & (NETWORK_ETHERNET_CONNECTED_BIT | NETWORK_WIFI_STA_CONNECTED_BIT | NETWORK_LTE_CONNECTED_BIT))) {
-            ESP_LOGI(TAG, "Network connected, initializing MQTT...");
-            bsp_mqtt_init();
-            mqtt_initialized = true;
-             vTaskDelete(NULL); // 删除当前任务
-
+        // 检查是否有网络连接且服务未初始化
+        if ((bits & (NETWORK_ETHERNET_CONNECTED_BIT | NETWORK_WIFI_STA_CONNECTED_BIT | NETWORK_LTE_CONNECTED_BIT))) {
+            
+            // 初始化HTTP客户端
+            if (!http_initialized) {
+                ESP_LOGI(TAG, "Network connected, initializing HTTP...");
+                bsp_http_init();
+                http_initialized = true;
+            }
+            
+            // 初始化MQTT
+            if (!mqtt_initialized) {
+                ESP_LOGI(TAG, "Network connected, initializing MQTT...");
+                bsp_mqtt_init();
+                mqtt_initialized = true;
+            }
+            
+            // 所有服务都初始化完成后删除任务
+            if (mqtt_initialized && http_initialized) {
+                vTaskDelete(NULL); // 删除当前任务
+            }
         }
 
         vTaskDelay(pdMS_TO_TICKS(1000)); // 每秒检查一次

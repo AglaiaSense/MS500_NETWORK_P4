@@ -9,7 +9,7 @@
 // Network configuration macros
 #define BSP_NETWORK_USE_WIFI_AP_STA    1
 #define BSP_NETWORK_USE_ETHERNET       1
-#define BSP_NETWORK_USE_LTE            1
+#define BSP_NETWORK_USE_LTE            0
 
 // Network status event bits
 #define NETWORK_ETHERNET_CONNECTED_BIT   BIT0
