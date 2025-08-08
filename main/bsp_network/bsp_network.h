@@ -24,7 +24,7 @@ typedef enum {
     NETWORK_STATUS_LTE_CONNECTED
 } network_status_t;
 
-extern uint8_t g_device_mac[6];
+extern char g_mac_str[13]; // MAC地址字符串格式，如"aabbccddeeff"
 extern EventGroupHandle_t g_network_event_group;
  
 void bsp_network_init(void);

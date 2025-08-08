@@ -114,9 +114,7 @@ void bsp_wifi_sta_config_only(void) {
 }
 
 static void generate_ap_ssid(char *ssid_buffer, size_t buffer_size) {
-    snprintf(ssid_buffer, buffer_size, "%s_%02X%02X%02X%02X%02X%02X", 
-             BSP_AP_SSID_PREFIX, g_device_mac[0], g_device_mac[1], g_device_mac[2], 
-             g_device_mac[3], g_device_mac[4], g_device_mac[5]);
+    snprintf(ssid_buffer, buffer_size, "%s_%s", BSP_AP_SSID_PREFIX, g_mac_str);
 }
 
 void bsp_wifi_ap_config_only(void) {

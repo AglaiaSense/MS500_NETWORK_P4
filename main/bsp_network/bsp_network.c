@@ -12,6 +12,7 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
 #include "freertos/task.h"
+#include <string.h>
 
 #if BSP_NETWORK_USE_WIFI_AP_STA
 #include "bsp_ap_sta.h"
@@ -27,8 +28,8 @@ static const char *TAG = "bsp_network";
 #define ESP_HOSTED_RESET_GPIO 22
 #define ESP_HOSTED_RESET_ACTIVE_HIGH 1
 
-// Global MAC address variable
-uint8_t g_device_mac[6] = {0};
+// Global MAC address string variable
+char g_mac_str[13] = {0}; // MAC地址字符串格式，如"aabbccddeeff"
 
 // Global network event group
 EventGroupHandle_t g_network_event_group = NULL;
@@ -118,15 +119,23 @@ static void esp_hosted_reset_slave(void) {
 
 void bsp_network_get_mac_address(void) {
     esp_err_t ret = ESP_OK;
+    uint8_t mac_bytes[6] = {0};
 
     // Get MAC address using ESP32-P4 compatible function
-    ret = esp_read_mac(g_device_mac, ESP_MAC_BASE);
+    ret = esp_read_mac(mac_bytes, ESP_MAC_BASE);
     if (ret == ESP_OK) {
-        ESP_LOGI(TAG, "Device MAC Address: %02X:%02X:%02X:%02X:%02X:%02X",
-                 g_device_mac[0], g_device_mac[1], g_device_mac[2],
-                 g_device_mac[3], g_device_mac[4], g_device_mac[5]);
+        // 直接生成字符串格式的MAC地址
+        snprintf(g_mac_str, sizeof(g_mac_str), "%02x%02x%02x%02x%02x%02x",
+                 mac_bytes[0], mac_bytes[1], mac_bytes[2],
+                 mac_bytes[3], mac_bytes[4], mac_bytes[5]);
+        
+        ESP_LOGI(TAG, "Device MAC Address: %02X:%02X:%02X:%02X:%02X:%02X (str: %s)",
+                 mac_bytes[0], mac_bytes[1], mac_bytes[2],
+                 mac_bytes[3], mac_bytes[4], mac_bytes[5], g_mac_str);
     } else {
         ESP_LOGE(TAG, "Failed to get device MAC address: %s", esp_err_to_name(ret));
+        // 如果获取失败，使用默认值
+        strcpy(g_mac_str, "000000000000");
     }
 }
 
