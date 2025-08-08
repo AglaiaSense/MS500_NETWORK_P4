@@ -8,6 +8,7 @@
 #include "esp_mac.h"
 #include "esp_netif.h"
 #include "esp_wifi.h"
+#include "driver/gpio.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/event_groups.h"
 #include "freertos/task.h"
@@ -21,6 +22,10 @@
 #endif
 
 static const char *TAG = "bsp_network";
+
+// ESP-Hosted从设备重置GPIO定义
+#define ESP_HOSTED_RESET_GPIO 22
+#define ESP_HOSTED_RESET_ACTIVE_HIGH 1
 
 // Global MAC address variable
 uint8_t g_device_mac[6] = {0};
@@ -68,6 +73,49 @@ static void network_monitor_task(void *pvParameter) {
     }
 }
 
+// ESP-Hosted从设备重置函数
+static void esp_hosted_reset_slave(void) {
+    ESP_LOGI(TAG, "Resetting ESP-Hosted slave device using GPIO[%d]", ESP_HOSTED_RESET_GPIO);
+    
+    // 配置GPIO为输出模式
+    gpio_config_t gpio_conf = {
+        .pin_bit_mask = (1ULL << ESP_HOSTED_RESET_GPIO),
+        .mode = GPIO_MODE_OUTPUT,
+        .pull_up_en = GPIO_PULLUP_DISABLE,
+        .pull_down_en = GPIO_PULLDOWN_DISABLE,
+        .intr_type = GPIO_INTR_DISABLE
+    };
+    
+    esp_err_t ret = gpio_config(&gpio_conf);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "Failed to configure GPIO[%d]: %s", ESP_HOSTED_RESET_GPIO, esp_err_to_name(ret));
+        return;
+    }
+    
+    ESP_LOGI(TAG, "GPIO [%d] configured", ESP_HOSTED_RESET_GPIO);
+    
+    // 执行重置序列
+    if (ESP_HOSTED_RESET_ACTIVE_HIGH) {
+        // 高电平有效重置
+        gpio_set_level(ESP_HOSTED_RESET_GPIO, 0);  // 确保初始为低电平
+        vTaskDelay(pdMS_TO_TICKS(10));             // 等待10ms
+        gpio_set_level(ESP_HOSTED_RESET_GPIO, 1);  // 拉高触发重置
+        vTaskDelay(pdMS_TO_TICKS(100));            // 保持100ms
+        gpio_set_level(ESP_HOSTED_RESET_GPIO, 0);  // 释放重置
+        vTaskDelay(pdMS_TO_TICKS(200));            // 等待设备稳定
+    } else {
+        // 低电平有效重置
+        gpio_set_level(ESP_HOSTED_RESET_GPIO, 1);  // 确保初始为高电平
+        vTaskDelay(pdMS_TO_TICKS(10));             // 等待10ms
+        gpio_set_level(ESP_HOSTED_RESET_GPIO, 0);  // 拉低触发重置
+        vTaskDelay(pdMS_TO_TICKS(100));            // 保持100ms
+        gpio_set_level(ESP_HOSTED_RESET_GPIO, 1);  // 释放重置
+        vTaskDelay(pdMS_TO_TICKS(200));            // 等待设备稳定
+    }
+    
+    ESP_LOGI(TAG, "ESP-Hosted slave device reset sequence completed");
+}
+
 void bsp_network_get_mac_address(void) {
     esp_err_t ret = ESP_OK;
 
@@ -82,8 +130,51 @@ void bsp_network_get_mac_address(void) {
     }
 }
 
+// 异步任务：WiFi初始化
+#if BSP_NETWORK_USE_WIFI_AP_STA
+static void wifi_init_task(void *pvParameters) {
+    ESP_LOGI(TAG, "Starting WiFi initialization task...");
+    
+    // 关键修复：在WiFi初始化前重置ESP-Hosted从设备
+    esp_hosted_reset_slave();
+    
+    bsp_wifi_log_config();
+    bsp_ap_sta_init();
+    
+    ESP_LOGI(TAG, "WiFi initialization task completed");
+    vTaskDelete(NULL);
+}
+#endif
+
+// 异步任务：以太网初始化
+#if BSP_NETWORK_USE_ETHERNET
+static void ethernet_init_task(void *pvParameters) {
+    ESP_LOGI(TAG, "Starting Ethernet initialization task...");
+    
+    bsp_ethernet_init();
+    
+    ESP_LOGI(TAG, "Ethernet initialization task completed");
+    vTaskDelete(NULL);
+}
+#endif
+
+// 异步任务：LTE初始化
+#if BSP_NETWORK_USE_LTE
+static void lte_init_task(void *pvParameters) {
+    ESP_LOGI(TAG, "Starting LTE initialization task...");
+    
+    bsp_lte_init();
+    
+    ESP_LOGI(TAG, "LTE initialization task completed");
+    vTaskDelete(NULL);
+}
+#endif
+
 void bsp_network_init(void) {
-    ESP_LOGI(TAG, "Initializing network BSP...");
+    ESP_LOGI(TAG, "Initializing network BSP (async mode)...");
+
+    // 关键修复：在所有网络组件初始化前，优先重置ESP-Hosted从设备
+    ESP_LOGI(TAG, "Performing early ESP-Hosted slave reset before network initialization");
 
     // Create network event group
     g_network_event_group = xEventGroupCreate();
@@ -98,31 +189,76 @@ void bsp_network_init(void) {
         return;
     }
 
-    // Get and print MAC address first
+    // Get and print MAC address first (同步执行，快速完成)
     bsp_network_get_mac_address();
 
-    // Common network initialization
+    // Common network initialization (同步执行，必须完成才能创建其他网络接口)
     ESP_ERROR_CHECK(esp_netif_init());
     ESP_ERROR_CHECK(esp_event_loop_create_default());
 
+
+    
+    // 异步启动WiFi初始化任务
 #if BSP_NETWORK_USE_WIFI_AP_STA
-    ESP_LOGI(TAG, "Using WiFi AP/STA mode");
-    bsp_wifi_log_config();
-    bsp_ap_sta_init();
+    ESP_LOGI(TAG, "Creating WiFi AP/STA initialization task...");
+    if (xTaskCreate(wifi_init_task, "wifi_init", 1024*4, NULL, 4, NULL) != pdPASS) {
+        ESP_LOGE(TAG, "Failed to create WiFi initialization task");
+    }
 #endif
 
+    // 异步启动以太网初始化任务
 #if BSP_NETWORK_USE_ETHERNET
-    ESP_LOGI(TAG, "Using Ethernet mode");
-    bsp_ethernet_init();
+    ESP_LOGI(TAG, "Creating Ethernet initialization task...");
+    if (xTaskCreate(ethernet_init_task, "eth_init", 1024*4, NULL, 4, NULL) != pdPASS) {
+        ESP_LOGE(TAG, "Failed to create Ethernet initialization task");
+    }
 #endif
 
+    // 异步启动LTE初始化任务
 #if BSP_NETWORK_USE_LTE
-    ESP_LOGI(TAG, "Using LTE mode");
-    bsp_lte_init();
-
+    ESP_LOGI(TAG, "Creating LTE initialization task...");
+    if (xTaskCreate(lte_init_task, "lte_init", 1024*4, NULL, 4, NULL) != pdPASS) {
+        ESP_LOGE(TAG, "Failed to create LTE initialization task");
+    }
 #endif
 
-    ESP_LOGI(TAG, "Network BSP initialized successfully");
+    ESP_LOGI(TAG, "Network BSP async initialization started (tasks created)");
+}
+
+//------------------ 异步初始化辅助功能 ------------------
+
+// 等待任意网络连接就绪（可选的同步等待）
+esp_err_t bsp_network_wait_any_connection(uint32_t timeout_ms) {
+    if (g_network_event_group == NULL) {
+        ESP_LOGE(TAG, "Network event group not initialized");
+        return ESP_ERR_INVALID_STATE;
+    }
+
+    ESP_LOGI(TAG, "Waiting for any network connection (timeout: %lu ms)...", timeout_ms);
+
+    TickType_t timeout_ticks = (timeout_ms == UINT32_MAX) ? portMAX_DELAY : pdMS_TO_TICKS(timeout_ms);
+    
+    EventBits_t bits = xEventGroupWaitBits(g_network_event_group,
+                                           NETWORK_ETHERNET_CONNECTED_BIT | NETWORK_WIFI_STA_CONNECTED_BIT | NETWORK_LTE_CONNECTED_BIT,
+                                           pdFALSE,  // 不清除位
+                                           pdFALSE,  // 等待任意一个位
+                                           timeout_ticks);
+
+    if (bits & (NETWORK_ETHERNET_CONNECTED_BIT | NETWORK_WIFI_STA_CONNECTED_BIT | NETWORK_LTE_CONNECTED_BIT)) {
+        if (bits & NETWORK_ETHERNET_CONNECTED_BIT) {
+            ESP_LOGI(TAG, "Ethernet connection ready");
+        }
+        if (bits & NETWORK_WIFI_STA_CONNECTED_BIT) {
+            ESP_LOGI(TAG, "WiFi STA connection ready");
+        }
+        if (bits & NETWORK_LTE_CONNECTED_BIT) {
+            ESP_LOGI(TAG, "LTE connection ready");
+        }
+        return ESP_OK;
+    } else {
+        ESP_LOGW(TAG, "No network connection established within timeout");
+        return ESP_ERR_TIMEOUT;
+    }
 }
 
 //------------------ 网络状态查询功能 ------------------

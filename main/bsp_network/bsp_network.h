@@ -28,6 +28,9 @@ extern uint8_t g_device_mac[6];
 extern EventGroupHandle_t g_network_event_group;
  
 void bsp_network_init(void);
+//等待网络连接就绪 (可调用网络方法)
+esp_err_t bsp_network_wait_any_connection(uint32_t timeout_ms);  
+
 void bsp_network_get_mac_address(void);
 void bsp_network_print_status(void);
 

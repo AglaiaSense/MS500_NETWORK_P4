@@ -7,6 +7,12 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/semphr.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+//------------------ 公共数据结构定义 ------------------
+
 // HTTP请求类型
 typedef enum {
     BSP_HTTP_METHOD_GET = 0,
@@ -54,25 +60,16 @@ typedef struct bsp_http_request_context {
     SemaphoreHandle_t complete_sem; // 完成信号量
     bsp_http_response_t *response;  // 响应数据指针
     bool is_async;                  // 是否异步请求
+    bool cancelled;                 // 取消标志，用于优雅退出
 } bsp_http_request_context_t;
+
+//------------------ 核心管理 API ------------------
 
 // HTTP客户端初始化
 void bsp_http_init(void);
 
-// 同步API (统一参数结构)
-esp_err_t bsp_http_get(const char *url, bsp_http_callback_t callback, bsp_http_request_context_t **context);
-esp_err_t bsp_http_post(const char *url, const char *post_data, bsp_http_callback_t callback, bsp_http_request_context_t **context);
-esp_err_t bsp_http_request(bsp_http_request_context_t *context);
-
-// 异步API (统一参数结构)
-esp_err_t bsp_http_get_async(const char *url, bsp_http_callback_t callback, bsp_http_request_context_t **context);
-esp_err_t bsp_http_post_async(const char *url, const char *post_data, bsp_http_callback_t callback, bsp_http_request_context_t **context);
-esp_err_t bsp_http_request_async(bsp_http_request_context_t *context);
-
-// 请求管理
-esp_err_t bsp_http_wait_completion(bsp_http_request_context_t *context, uint32_t timeout_ms);
-esp_err_t bsp_http_cancel_request(bsp_http_request_context_t *context);
-bsp_http_status_t bsp_http_get_status(bsp_http_request_context_t *context);
+// 检查是否已初始化
+bool bsp_http_is_initialized(void);
 
 // 上下文管理
 bsp_http_request_context_t* bsp_http_create_context(void);
@@ -80,5 +77,22 @@ void bsp_http_free_context(bsp_http_request_context_t *context);
 
 // 清理HTTP响应数据
 void bsp_http_response_cleanup(bsp_http_response_t *response);
+
+//------------------ 核心处理函数 ------------------
+
+// 执行HTTP请求的核心函数（同步/异步通用）
+esp_err_t bsp_http_perform_request(bsp_http_request_context_t *context);
+
+// 同步请求队列管理
+esp_err_t bsp_http_queue_sync_request(bsp_http_request_context_t *context);
+
+//------------------ 注意 ------------------
+// 如需使用HTTP功能，请包含以下专用头文件：
+// - 同步HTTP：#include "bsp_http_sync.h"
+// - 异步HTTP：#include "bsp_http_async.h"
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif // BSP_HTTP_H

@@ -190,7 +190,10 @@
         "bsp_ethernet.h": "c",
         "esp_eth.h": "c",
         "bsp_http.h": "c",
-        "bsp_http_async_test.h": "c"
+        "bsp_http_async_test.h": "c",
+        "*.rh": "c",
+        "bsp_http_async.h": "c",
+        "bsp_http_test_async.h": "c"
     },
     "idf.portWin": "COM4",
     "idf.flashType": "UART",
