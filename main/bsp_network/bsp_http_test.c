@@ -13,14 +13,15 @@ static void test_http_get_basic(void) {
     ESP_LOGI(TAG, "Starting basic GET test...");
     
     // 内联回调函数
-    void inline_callback(bsp_http_response_t *response) {
+    void inline_callback(bsp_http_response_t *response, bsp_http_request_context_t *context) {
         if (response->response_data) {
-            ESP_LOGI(TAG, "GET Test Response: %.*s", response->response_len, response->response_data);
+            ESP_LOGI(TAG, "GET Test [ID:%lu]: %.*s", context->request_id, response->response_len, response->response_data);
         }
     }
     
     const char *test_url = "http://httpbin.org/get";
-    esp_err_t err = bsp_http_get(test_url, inline_callback);
+    bsp_http_request_context_t *context = NULL;
+    esp_err_t err = bsp_http_get(test_url, inline_callback, &context);
     
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to send GET request: %s", esp_err_to_name(err));
@@ -32,14 +33,15 @@ static void test_http_get_json(void) {
     ESP_LOGI(TAG, "Starting JSON GET test...");
     
     // 内联回调函数
-    void inline_callback(bsp_http_response_t *response) {
+    void inline_callback(bsp_http_response_t *response, bsp_http_request_context_t *context) {
         if (response->response_data) {
-            ESP_LOGI(TAG, "JSON Test Response: %.*s", response->response_len, response->response_data);
+            ESP_LOGI(TAG, "JSON Test [ID:%lu]: %.*s", context->request_id, response->response_len, response->response_data);
         }
     }
     
     const char *test_url = "http://httpbin.org/json";
-    esp_err_t err = bsp_http_get(test_url, inline_callback);
+    bsp_http_request_context_t *context = NULL;
+    esp_err_t err = bsp_http_get(test_url, inline_callback, &context);
     
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to send JSON GET request: %s", esp_err_to_name(err));
@@ -51,16 +53,17 @@ static void test_http_post_json(void) {
     ESP_LOGI(TAG, "Starting POST JSON test...");
     
     // 内联回调函数
-    void inline_callback(bsp_http_response_t *response) {
+    void inline_callback(bsp_http_response_t *response, bsp_http_request_context_t *context) {
         if (response->response_data) {
-            ESP_LOGI(TAG, "POST JSON Test Response: %.*s", response->response_len, response->response_data);
+            ESP_LOGI(TAG, "POST JSON [ID:%lu]: %.*s", context->request_id, response->response_len, response->response_data);
         }
     }
     
     const char *test_url = "http://httpbin.org/post";
     const char *json_data = "{\"device\":\"ESP32-P4\",\"message\":\"Hello from BSP HTTP\",\"timestamp\":123456789}";
     
-    esp_err_t err = bsp_http_post(test_url, json_data, inline_callback);
+    bsp_http_request_context_t *context = NULL;
+    esp_err_t err = bsp_http_post(test_url, json_data, inline_callback, &context);
     
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to send POST request: %s", esp_err_to_name(err));
@@ -72,16 +75,17 @@ static void test_http_post_form(void) {
     ESP_LOGI(TAG, "Starting POST form test...");
     
     // 内联回调函数
-    void inline_callback(bsp_http_response_t *response) {
+    void inline_callback(bsp_http_response_t *response, bsp_http_request_context_t *context) {
         if (response->response_data) {
-            ESP_LOGI(TAG, "POST Form Test Response: %.*s", response->response_len, response->response_data);
+            ESP_LOGI(TAG, "POST Form [ID:%lu]: %.*s", context->request_id, response->response_len, response->response_data);
         }
     }
     
     const char *test_url = "http://httpbin.org/post";
     const char *form_data = "name=ESP32-P4&version=1.0&test=form_data";
     
-    esp_err_t err = bsp_http_post(test_url, form_data, inline_callback);
+    bsp_http_request_context_t *context = NULL;
+    esp_err_t err = bsp_http_post(test_url, form_data, inline_callback, &context);
     
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to send POST form request: %s", esp_err_to_name(err));
@@ -93,14 +97,15 @@ static void test_weather_api(void) {
     ESP_LOGI(TAG, "Starting Weather API test...");
     
     // 内联回调函数
-    void inline_callback(bsp_http_response_t *response) {
+    void inline_callback(bsp_http_response_t *response, bsp_http_request_context_t *context) {
         if (response->response_data) {
-            ESP_LOGI(TAG, "Weather API Response: %.*s", response->response_len, response->response_data);
+            ESP_LOGI(TAG, "Weather API [ID:%lu]: %.*s", context->request_id, response->response_len, response->response_data);
         }
     }
     
     const char *weather_url = "http://api.openweathermap.org/data/2.5/weather?q=Beijing&appid=demo&units=metric";
-    esp_err_t err = bsp_http_get(weather_url, inline_callback);
+    bsp_http_request_context_t *context = NULL;
+    esp_err_t err = bsp_http_get(weather_url, inline_callback, &context);
     
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "Failed to send weather API request: %s", esp_err_to_name(err));
@@ -112,26 +117,29 @@ static void test_custom_request(void) {
     ESP_LOGI(TAG, "Starting custom request test...");
     
     // 内联回调函数
-    void inline_callback(bsp_http_response_t *response) {
+    void inline_callback(bsp_http_response_t *response, bsp_http_request_context_t *context) {
         if (response->response_data) {
-            ESP_LOGI(TAG, "Custom Request Response: %.*s", response->response_len, response->response_data);
+            ESP_LOGI(TAG, "Custom Request [ID:%lu]: %.*s", context->request_id, response->response_len, response->response_data);
         }
     }
     
-    bsp_http_request_t request = {
-        .url = "http://httpbin.org/headers",
-        .method = BSP_HTTP_METHOD_GET,
-        .post_data = NULL,
-        .post_data_len = 0,
-        .headers = "User-Agent: ESP32-P4-BSP-HTTP/1.0",
-        .timeout_ms = 10000,
-        .callback = inline_callback
-    };
-    
-    esp_err_t err = bsp_http_request(&request);
-    
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to send custom request: %s", esp_err_to_name(err));
+    bsp_http_request_context_t *context = bsp_http_create_context();
+    if (context != NULL) {
+        context->url = strdup("http://httpbin.org/headers");
+        context->method = BSP_HTTP_METHOD_GET;
+        context->post_data = NULL;
+        context->post_data_len = 0;
+        context->headers = strdup("User-Agent: ESP32-P4-BSP-HTTP/1.0");
+        context->timeout_ms = 10000;
+        context->callback = inline_callback;
+        
+        esp_err_t err = bsp_http_request(context);
+        
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "Failed to send custom request: %s", esp_err_to_name(err));
+        }
+    } else {
+        ESP_LOGE(TAG, "Failed to create context for custom request");
     }
 }
 

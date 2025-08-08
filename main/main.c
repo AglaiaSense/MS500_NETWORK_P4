@@ -37,8 +37,11 @@
 
 #include "bsp_usb_cdc.h"
 #include "vc_video_v4l2.h"
-#include "bsp_network.h"
+
 #include "bsp_http.h"
+#include "bsp_network.h"
+
+#include "bsp_http_async_test.h"
 #include "bsp_http_test.h"
 
 static const char *TAG = "APP_MAIN";
@@ -159,11 +162,12 @@ void main_video_task(void *pvParameters) {
     while (1) {
         vTaskDelay(pdMS_TO_TICKS(1000));
         printf("runtime ..........: %d\r\n", runtime_sec++);
-        if (runtime_sec %10 == 0)  {
+        if (runtime_sec % 15 == 0) {
             bsp_network_print_status();
             bsp_http_test();
+            bsp_http_async_test();
+
         }
-        
         // printf("22222222222222222222 ..........: %d\r\n", runtime_sec++);
     }
     vTaskDelete(NULL);
@@ -393,7 +397,6 @@ void app_boot_launch_flash(void) {
 }
 
 void app_main(void) {
-
 
     app_start_printf();
 

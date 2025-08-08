@@ -188,7 +188,9 @@
         "esp_efuse.h": "c",
         "bsp_ap_sta.h": "c",
         "bsp_ethernet.h": "c",
-        "esp_eth.h": "c"
+        "esp_eth.h": "c",
+        "bsp_http.h": "c",
+        "bsp_http_async_test.h": "c"
     },
     "idf.portWin": "COM4",
     "idf.flashType": "UART",
