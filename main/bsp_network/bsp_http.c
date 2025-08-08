@@ -2,17 +2,19 @@
 #include "esp_http_client.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
 #include "freertos/semphr.h"
-#include <string.h>
+#include "freertos/task.h"
 #include <stdlib.h>
+#include <string.h>
 
 static const char *TAG = "bsp_http";
 
-// HTTP任务队列大小
-#define HTTP_TASK_QUEUE_SIZE 10
-#define HTTP_TASK_STACK_SIZE (1024 * 4)
-#define HTTP_MAX_RESPONSE_SIZE (1024 * 16)
+#define HTTP_TASK_QUEUE_SIZE 10       // 队列次数
+#define HTTP_TASK_STACK_SIZE (1024 * 4)   // 队列栈大小
+
+#define HTTP_CINFIG_BUFFER_SIZE (1024 * 2) // 单次response数据大小
+#define HTTP_RESPONSE_SIZE (1024 * 10)     // 总响应数据大小
+
 
 // HTTP任务队列
 static QueueHandle_t http_task_queue = NULL;
@@ -32,9 +34,9 @@ void bsp_http_init(void) {
     }
 
     ESP_LOGI(TAG, "Initializing HTTP client...");
-    
+
     // 创建HTTP任务队列
-    http_task_queue = xQueueCreate(HTTP_TASK_QUEUE_SIZE, sizeof(bsp_http_request_t*));
+    http_task_queue = xQueueCreate(HTTP_TASK_QUEUE_SIZE, sizeof(bsp_http_request_t *));
     if (http_task_queue == NULL) {
         ESP_LOGE(TAG, "Failed to create HTTP task queue");
         return;
@@ -57,63 +59,75 @@ void bsp_http_init(void) {
 // HTTP事件处理回调
 static esp_err_t http_event_handler(esp_http_client_event_t *evt) {
     bsp_http_response_t *response = (bsp_http_response_t *)evt->user_data;
-    
+
     switch (evt->event_id) {
-        case HTTP_EVENT_ERROR:
-            ESP_LOGD(TAG, "HTTP_EVENT_ERROR");
-            break;
-        case HTTP_EVENT_ON_CONNECTED:
-            ESP_LOGD(TAG, "HTTP_EVENT_ON_CONNECTED");
-            break;
-        case HTTP_EVENT_HEADER_SENT:
-            ESP_LOGD(TAG, "HTTP_EVENT_HEADER_SENT");
-            break;
-        case HTTP_EVENT_ON_HEADER:
-            ESP_LOGD(TAG, "HTTP_EVENT_ON_HEADER, key=%s, value=%s", evt->header_key, evt->header_value);
-            break;
-        case HTTP_EVENT_ON_DATA:
-            ESP_LOGD(TAG, "HTTP_EVENT_ON_DATA, len=%d", evt->data_len);
-            if (!esp_http_client_is_chunked_response(evt->client)) {
-                // 分配或扩展响应缓冲区
+    case HTTP_EVENT_ERROR:
+        ESP_LOGD(TAG, "HTTP_EVENT_ERROR");
+        break;
+    case HTTP_EVENT_ON_CONNECTED:
+        ESP_LOGD(TAG, "HTTP_EVENT_ON_CONNECTED");
+        break;
+    case HTTP_EVENT_HEADER_SENT:
+        ESP_LOGD(TAG, "HTTP_EVENT_HEADER_SENT");
+        break;
+    case HTTP_EVENT_ON_HEADER:
+        ESP_LOGD(TAG, "HTTP_EVENT_ON_HEADER, key=%s, value=%s", evt->header_key, evt->header_value);
+        break;
+    case HTTP_EVENT_ON_DATA:
+        ESP_LOGD(TAG, "HTTP_EVENT_ON_DATA, len=%d", evt->data_len);
+        if (!esp_http_client_is_chunked_response(evt->client)) {
+            // 分配或扩展响应缓冲区
+            if (response->response_data == NULL) {
+                response->response_data = malloc(HTTP_RESPONSE_SIZE);
                 if (response->response_data == NULL) {
-                    response->response_data = malloc(HTTP_MAX_RESPONSE_SIZE);
-                    if (response->response_data == NULL) {
-                        ESP_LOGE(TAG, "Failed to allocate response buffer");
-                        return ESP_FAIL;
-                    }
-                    response->response_len = 0;
+                    ESP_LOGE(TAG, "Failed to allocate response buffer");
+                    return ESP_FAIL;
                 }
-                
-                // 检查缓冲区空间
-                if (response->response_len + evt->data_len < HTTP_MAX_RESPONSE_SIZE - 1) {
-                    memcpy(response->response_data + response->response_len, evt->data, evt->data_len);
-                    response->response_len += evt->data_len;
-                    response->response_data[response->response_len] = '\0';
-                } else {
-                    ESP_LOGW(TAG, "Response buffer full, truncating data");
-                }
+                response->response_len = 0;
             }
-            break;
-        case HTTP_EVENT_ON_FINISH:
-            ESP_LOGD(TAG, "HTTP_EVENT_ON_FINISH");
-            response->is_complete = true;
-            break;
-        case HTTP_EVENT_DISCONNECTED:
-            ESP_LOGD(TAG, "HTTP_EVENT_DISCONNECTED");
-            break;
-        case HTTP_EVENT_REDIRECT:
-            ESP_LOGD(TAG, "HTTP_EVENT_REDIRECT");
-            break;
+
+            // 检查缓冲区空间
+            if (response->response_len + evt->data_len < HTTP_RESPONSE_SIZE - 1) {
+                memcpy(response->response_data + response->response_len, evt->data, evt->data_len);
+                response->response_len += evt->data_len;
+                response->response_data[response->response_len] = '\0';
+            } else {
+                ESP_LOGW(TAG, "Response buffer full, truncating data");
+            }
+        }
+        break;
+    case HTTP_EVENT_ON_FINISH:
+        ESP_LOGD(TAG, "HTTP_EVENT_ON_FINISH");
+        break;
+    case HTTP_EVENT_DISCONNECTED:
+        ESP_LOGD(TAG, "HTTP_EVENT_DISCONNECTED");
+        break;
+    case HTTP_EVENT_REDIRECT:
+        ESP_LOGD(TAG, "HTTP_EVENT_REDIRECT");
+        break;
     }
     return ESP_OK;
 }
 
 //------------------ HTTP请求处理功能 ------------------
 
+// 新增函数：打印HTTP请求和响应信息
+static void log_http_request_response(bsp_http_request_t *request, bsp_http_response_t *response) {
+    printf("-----------------http_request_response--------------------\n");
+    ESP_LOGI(TAG, "Request URL: %s", request->url);
+    ESP_LOGI(TAG, "Request Method: %d", request->method);
+    ESP_LOGI(TAG, "Response Status: %d", response->status_code);
+    ESP_LOGI(TAG, "Response Data Length: %d", response->response_len);
+    if (response->response_data && response->response_len > 0) {
+        ESP_LOGI(TAG, "Response Data: %.*s", response->response_len, response->response_data);
+    }
+    printf(" ======================================================= \n");
+}
+
 // 执行HTTP请求的核心函数
 static esp_err_t perform_http_request(bsp_http_request_t *request) {
     ESP_LOGI(TAG, "Performing HTTP request: %s", request->url);
-    
+
     bsp_http_response_t response = {0};
     esp_err_t err = ESP_OK;
 
@@ -123,7 +137,7 @@ static esp_err_t perform_http_request(bsp_http_request_t *request) {
         .event_handler = http_event_handler,
         .user_data = &response,
         .timeout_ms = request->timeout_ms > 0 ? request->timeout_ms : 5000,
-        .buffer_size = HTTP_MAX_RESPONSE_SIZE,
+        .buffer_size = HTTP_CINFIG_BUFFER_SIZE,
         .buffer_size_tx = 1024,
     };
 
@@ -135,21 +149,21 @@ static esp_err_t perform_http_request(bsp_http_request_t *request) {
 
     // 设置HTTP方法
     switch (request->method) {
-        case BSP_HTTP_METHOD_GET:
-            esp_http_client_set_method(client, HTTP_METHOD_GET);
-            break;
-        case BSP_HTTP_METHOD_POST:
-            esp_http_client_set_method(client, HTTP_METHOD_POST);
-            if (request->post_data && request->post_data_len > 0) {
-                esp_http_client_set_post_field(client, request->post_data, request->post_data_len);
-            }
-            break;
-        case BSP_HTTP_METHOD_PUT:
-            esp_http_client_set_method(client, HTTP_METHOD_PUT);
-            break;
-        case BSP_HTTP_METHOD_DELETE:
-            esp_http_client_set_method(client, HTTP_METHOD_DELETE);
-            break;
+    case BSP_HTTP_METHOD_GET:
+        esp_http_client_set_method(client, HTTP_METHOD_GET);
+        break;
+    case BSP_HTTP_METHOD_POST:
+        esp_http_client_set_method(client, HTTP_METHOD_POST);
+        if (request->post_data && request->post_data_len > 0) {
+            esp_http_client_set_post_field(client, request->post_data, request->post_data_len);
+        }
+        break;
+    case BSP_HTTP_METHOD_PUT:
+        esp_http_client_set_method(client, HTTP_METHOD_PUT);
+        break;
+    case BSP_HTTP_METHOD_DELETE:
+        esp_http_client_set_method(client, HTTP_METHOD_DELETE);
+        break;
     }
 
     // 设置请求头
@@ -161,14 +175,12 @@ static esp_err_t perform_http_request(bsp_http_request_t *request) {
     err = esp_http_client_perform(client);
     if (err == ESP_OK) {
         response.status_code = esp_http_client_get_status_code(client);
-        response.content_length = esp_http_client_get_content_length(client);
-        
-        ESP_LOGI(TAG, "HTTP request completed - Status: %d, Content-Length: %d", 
-                 response.status_code, response.content_length);
-        
+
+        log_http_request_response(request, &response);
+
         // 调用回调函数处理响应
         if (request->callback) {
-            request->callback(&response, request->user_data);
+            request->callback(&response);
         }
     } else {
         ESP_LOGE(TAG, "HTTP request failed: %s", esp_err_to_name(err));
@@ -176,30 +188,33 @@ static esp_err_t perform_http_request(bsp_http_request_t *request) {
 
     // 清理资源
     esp_http_client_cleanup(client);
-    
+
     // 清理响应数据
     bsp_http_response_cleanup(&response);
-    
+
     return err;
 }
 
 // HTTP任务处理函数
 static void http_task(void *pvParameters) {
     bsp_http_request_t *request;
-    
+
     ESP_LOGI(TAG, "HTTP task started");
-    
+
     while (1) {
         // 等待队列中的请求
         if (xQueueReceive(http_task_queue, &request, portMAX_DELAY) == pdTRUE) {
             if (request != NULL) {
                 // 执行HTTP请求
                 perform_http_request(request);
-                
+
                 // 释放请求内存
-                if (request->url) free(request->url);
-                if (request->post_data) free(request->post_data);
-                if (request->headers) free(request->headers);
+                if (request->url)
+                    free(request->url);
+                if (request->post_data)
+                    free(request->post_data);
+                if (request->headers)
+                    free(request->headers);
                 free(request);
             }
         }
@@ -209,7 +224,7 @@ static void http_task(void *pvParameters) {
 //------------------ 公共API函数 ------------------
 
 // 执行HTTP GET请求
-esp_err_t bsp_http_get(const char *url, bsp_http_callback_t callback, void *user_data) {
+esp_err_t bsp_http_get(const char *url, bsp_http_callback_t callback) {
     if (!http_initialized) {
         ESP_LOGE(TAG, "HTTP not initialized");
         return ESP_FAIL;
@@ -231,7 +246,6 @@ esp_err_t bsp_http_get(const char *url, bsp_http_callback_t callback, void *user
     request->url = strdup(url);
     request->method = BSP_HTTP_METHOD_GET;
     request->callback = callback;
-    request->user_data = user_data;
     request->timeout_ms = 5000;
 
     // 将请求加入队列
@@ -246,7 +260,7 @@ esp_err_t bsp_http_get(const char *url, bsp_http_callback_t callback, void *user
 }
 
 // 执行HTTP POST请求
-esp_err_t bsp_http_post(const char *url, const char *post_data, bsp_http_callback_t callback, void *user_data) {
+esp_err_t bsp_http_post(const char *url, const char *post_data, bsp_http_callback_t callback) {
     if (!http_initialized) {
         ESP_LOGE(TAG, "HTTP not initialized");
         return ESP_FAIL;
@@ -268,7 +282,6 @@ esp_err_t bsp_http_post(const char *url, const char *post_data, bsp_http_callbac
     request->url = strdup(url);
     request->method = BSP_HTTP_METHOD_POST;
     request->callback = callback;
-    request->user_data = user_data;
     request->timeout_ms = 5000;
 
     if (post_data) {
@@ -280,7 +293,9 @@ esp_err_t bsp_http_post(const char *url, const char *post_data, bsp_http_callbac
     if (xQueueSend(http_task_queue, &request, pdMS_TO_TICKS(1000)) != pdTRUE) {
         ESP_LOGE(TAG, "Failed to queue POST request");
         free(request->url);
-        if (request->post_data) free(request->post_data);
+        if (request->post_data) {
+            free(request->post_data);
+        }
         free(request);
         return ESP_FAIL;
     }
@@ -309,11 +324,11 @@ esp_err_t bsp_http_request(bsp_http_request_t *request) {
 
     memcpy(req_copy, request, sizeof(bsp_http_request_t));
     req_copy->url = strdup(request->url);
-    
+
     if (request->post_data) {
         req_copy->post_data = strdup(request->post_data);
     }
-    
+
     if (request->headers) {
         req_copy->headers = strdup(request->headers);
     }
@@ -322,8 +337,10 @@ esp_err_t bsp_http_request(bsp_http_request_t *request) {
     if (xQueueSend(http_task_queue, &req_copy, pdMS_TO_TICKS(1000)) != pdTRUE) {
         ESP_LOGE(TAG, "Failed to queue request");
         free(req_copy->url);
-        if (req_copy->post_data) free(req_copy->post_data);
-        if (req_copy->headers) free(req_copy->headers);
+        if (req_copy->post_data)
+            free(req_copy->post_data);
+        if (req_copy->headers)
+            free(req_copy->headers);
         free(req_copy);
         return ESP_FAIL;
     }
