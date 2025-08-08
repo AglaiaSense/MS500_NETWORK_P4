@@ -61,6 +61,7 @@ typedef struct bsp_http_request_context {
     bsp_http_response_t *response;  // 响应数据指针
     bool is_async;                  // 是否异步请求
     bool cancelled;                 // 取消标志，用于优雅退出
+    bool auto_cleanup;              // 自动清理标志，用于Fire-and-Forget模式
 } bsp_http_request_context_t;
 
 //------------------ 核心管理 API ------------------

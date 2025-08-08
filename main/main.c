@@ -162,11 +162,12 @@ void main_video_task(void *pvParameters) {
     while (1) {
         vTaskDelay(pdMS_TO_TICKS(1000));
         printf("runtime ..........: %d\r\n", runtime_sec++);
-        if (runtime_sec% 15 == 0) {
+        if (runtime_sec % 15 == 0) {
             bsp_network_print_status();
             // bsp_http_test_sync();
-            bsp_http_test_async();
+            // delay_ms(1000);
 
+            // bsp_http_test_async();
         }
     }
     vTaskDelete(NULL);

@@ -76,7 +76,12 @@ bool bsp_http_is_initialized(void) {
 
 // HTTP事件处理回调
 static esp_err_t http_event_handler(esp_http_client_event_t *evt) {
-    bsp_http_response_t *response = (bsp_http_response_t *)evt->user_data;
+    bsp_http_request_context_t *context = (bsp_http_request_context_t *)evt->user_data;
+    if (context == NULL || context->response == NULL) {
+        ESP_LOGE(TAG, "Invalid context in HTTP event handler");
+        return ESP_FAIL;
+    }
+    bsp_http_response_t *response = context->response;
 
     switch (evt->event_id) {
     case HTTP_EVENT_ERROR:
@@ -153,6 +158,34 @@ static esp_err_t http_event_handler(esp_http_client_event_t *evt) {
         break;
     case HTTP_EVENT_ON_FINISH:
         ESP_LOGI(TAG, "HTTP_EVENT_ON_FINISH - HTTP request completed");
+        
+        // 对于真正的异步请求，在这里处理完成逻辑
+        if (context->is_async) {
+            // 设置响应状态
+            response->status_code = esp_http_client_get_status_code(evt->client);
+            response->status = BSP_HTTP_STATUS_COMPLETED;
+            response->error_code = ESP_OK;
+            
+            ESP_LOGI(TAG, "Async HTTP request ID %lu finished, calling callback", context->request_id);
+            
+            // 调用回调函数
+            if (context->callback) {
+                context->callback(response, context);
+            }
+            
+            // 给出完成信号量
+            if (context->complete_sem) {
+                UBaseType_t sem_count = uxSemaphoreGetCount(context->complete_sem);
+                if (sem_count == 0) {
+                    BaseType_t give_result = xSemaphoreGive(context->complete_sem);
+                    if (give_result == pdTRUE) {
+                        ESP_LOGI(TAG, "Async completion semaphore given for request ID: %lu", context->request_id);
+                    } else {
+                        ESP_LOGW(TAG, "Failed to give async completion semaphore for request ID: %lu", context->request_id);
+                    }
+                }
+            }
+        }
         break;
     case HTTP_EVENT_DISCONNECTED:
         ESP_LOGI(TAG, "HTTP_EVENT_DISCONNECTED - Connection closed");
@@ -201,15 +234,15 @@ esp_err_t bsp_http_perform_request(bsp_http_request_context_t *context) {
 
     esp_err_t err = ESP_OK;
 
-    // HTTP客户端配置 - 优化超时设置防止长时间阻塞
+    // HTTP客户端配置 - 根据请求类型选择同步/异步模式
     esp_http_client_config_t config = {
         .url = context->url,
         .event_handler = http_event_handler,
-        .user_data = context->response,
+        .user_data = context,  // 传递完整上下文而不是只传response
         .timeout_ms = context->timeout_ms > 0 ? context->timeout_ms : 3000, // 减少默认超时到3秒
         .buffer_size = HTTP_CINFIG_BUFFER_SIZE,
         .buffer_size_tx = 1024,
-        .is_async = false,          // 确保同步模式，避免内部异步处理导致的复杂性
+        .is_async = context->is_async,  // 关键：根据上下文决定是否异步
         .keep_alive_enable = false, // 禁用keep-alive减少连接复杂性
     };
 
@@ -260,36 +293,54 @@ esp_err_t bsp_http_perform_request(bsp_http_request_context_t *context) {
         esp_task_wdt_reset();
     }
 
-    if (err == ESP_OK) {
-        context->response->status_code = esp_http_client_get_status_code(client);
-        context->response->status = BSP_HTTP_STATUS_COMPLETED;
-        context->response->error_code = ESP_OK;
+    // 对于同步请求，需要在这里处理完成逻辑
+    // 对于异步请求，完成逻辑已在HTTP_EVENT_ON_FINISH中处理
+    if (!context->is_async) {
+        if (err == ESP_OK) {
+            context->response->status_code = esp_http_client_get_status_code(client);
+            context->response->status = BSP_HTTP_STATUS_COMPLETED;
+            context->response->error_code = ESP_OK;
 
-        log_http_request_response_context(context);
+            log_http_request_response_context(context);
 
-        // 调用回调函数处理响应
-        if (context->callback) {
-            context->callback(context->response, context);
+            // 调用回调函数处理响应
+            if (context->callback) {
+                context->callback(context->response, context);
+            }
+        } else {
+            ESP_LOGE(TAG, "HTTP request failed: %s", esp_err_to_name(err));
+
+            if (context->response) {
+                context->response->status = BSP_HTTP_STATUS_ERROR;
+                context->response->error_code = err;
+            }
+
+            if (context->callback && context->response) {
+                context->callback(context->response, context);
+            }
         }
     } else {
-        ESP_LOGE(TAG, "HTTP request failed: %s", esp_err_to_name(err));
-
-        if (context->response) {
+        // 异步请求：只记录错误，成功情况在事件处理器中处理
+        if (err != ESP_OK) {
+            ESP_LOGE(TAG, "Async HTTP request failed: %s", esp_err_to_name(err));
             context->response->status = BSP_HTTP_STATUS_ERROR;
             context->response->error_code = err;
-        }
-
-        if (context->callback && context->response) {
-            context->callback(context->response, context);
+            
+            // 对于异步错误，也需要给出信号量
+            if (context->complete_sem) {
+                UBaseType_t sem_count = uxSemaphoreGetCount(context->complete_sem);
+                if (sem_count == 0) {
+                    xSemaphoreGive(context->complete_sem);
+                }
+            }
         }
     }
 
     // 清理资源
     esp_http_client_cleanup(client);
 
-    // 统一发出完成信号（同步和异步请求都需要）
-    // 关键修复：防止信号量重复Give
-    if (context->complete_sem &&
+    // 同步请求的信号量处理（异步请求的信号量在事件处理器中处理）
+    if (!context->is_async && context->complete_sem &&
         (context->response->status == BSP_HTTP_STATUS_COMPLETED ||
          context->response->status == BSP_HTTP_STATUS_ERROR)) {
 
@@ -299,12 +350,12 @@ esp_err_t bsp_http_perform_request(bsp_http_request_context_t *context) {
             // 只有当信号量为空时才Give
             BaseType_t give_result = xSemaphoreGive(context->complete_sem);
             if (give_result != pdTRUE) {
-                ESP_LOGW(TAG, "Failed to give completion semaphore for request ID: %lu", context->request_id);
+                ESP_LOGW(TAG, "Failed to give completion semaphore for sync request ID: %lu", context->request_id);
             } else {
-                ESP_LOGD(TAG, "Completion semaphore given for request ID: %lu", context->request_id);
+                ESP_LOGD(TAG, "Completion semaphore given for sync request ID: %lu", context->request_id);
             }
         } else {
-            ESP_LOGD(TAG, "Completion semaphore already given for request ID: %lu (count: %lu)",
+            ESP_LOGD(TAG, "Completion semaphore already given for sync request ID: %lu (count: %lu)",
                      context->request_id, (unsigned long)sem_count);
         }
     }
@@ -403,6 +454,7 @@ bsp_http_request_context_t *bsp_http_create_context(void) {
     context->response = calloc(1, sizeof(bsp_http_response_t));
     context->is_async = true;   // 默认为异步，由调用者设置
     context->cancelled = false; // 初始化取消标志
+    context->auto_cleanup = false; // 初始化自动清理标志
 
     if (context->complete_sem == NULL || context->response == NULL) {
         ESP_LOGE(TAG, "Failed to create context resources");

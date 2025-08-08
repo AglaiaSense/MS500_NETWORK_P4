@@ -47,7 +47,13 @@ static void http_async_task(void *pvParameters) {
     ESP_LOGI(TAG, "Async HTTP request ID %lu completed with status: %d", 
              context->request_id, context->response->status);
     
-    // 任务结束，不释放context(由调用者负责)
+    // 检查是否需要自动清理（Fire-and-Forget模式）
+    if (context->auto_cleanup) {
+        ESP_LOGI(TAG, "Auto-cleaning up context for request ID: %lu", context->request_id);
+        bsp_http_free_context(context);
+    }
+    
+    // 任务结束
     vTaskDelete(NULL);
 }
 
